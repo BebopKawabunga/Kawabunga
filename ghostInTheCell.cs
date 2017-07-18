@@ -66,11 +66,6 @@ public class Player
 
             string instruction = myGameMap.GenerateNextInstruction();
 
-            // Write an action using Console.WriteLine()
-            // To debug: Console.Error.WriteLine("Debug messages...");
-
-
-            // Any valid action, such as "WAIT" or "MOVE source destination cyborgs"
             Console.WriteLine(instruction);
         }
     }
@@ -84,6 +79,8 @@ public class Player
         public int BombQuantity { get; set; }
 
         public List<Bomb> bombsTracker;
+
+        public Factory FactoryBoombed = null;
 
         public GameMap()
         {
@@ -173,6 +170,8 @@ public class Player
                     Factory otherFactory = link.GetOtherFactory(factory);
 
                     var results = findBestWay(factory, otherFactory);
+                    //factory.GetLinkForOtherFactory();
+                    //pouetBestFactoryWayToFactory1
 
                     if (factory.FactoryId == 3 && otherFactory.FactoryId == 4)
                     {
@@ -189,9 +188,9 @@ public class Player
                         oldFactory = nextFactory;
                     } while (i < results.Count);
 
-                    link.BestFactoryWayToFactory2 = results.ElementAt(1);
+                    link.BestFactoryWayToFactory1 = results.ElementAt(1);
                     link.BestFactoryWayToFactory2 = results.ElementAt(results.Count - 2);
-
+                    //Console.Error.WriteLine(link);
                 }
             }
         }
@@ -208,13 +207,11 @@ public class Player
 
         public string GenerateNextInstruction()
         {
-            int memFactoryId=-1;
-            int iddd = 0;
             var myFactories = factories.Values.Where(factory => factory.Possession == 1 && factory.Cyborgs > 1).OrderByDescending(factory => factory.Cyborgs);
             //var otherFactories = myFactories.SelectMany(factory => factory.Links).Select(link => link.GetOtherFactory(factory)).Where(otherFactory => otherFactory.Possession != 1));
-            
-            int waitingCyborgs = myFactories.Sum(factory => factory.Cyborgs) - myFactories.Count(); //pourquoi - nb Factories
-           
+
+            int waitingCyborgs = myFactories.Sum(factory => factory.Cyborgs); //pourquoi - nb Factories
+
             var selected = new List<Tuple<Factory, Factory, double, Tuple<int, int>, int>>();
 
             foreach (Factory factory in myFactories)
@@ -224,74 +221,54 @@ public class Player
                     Factory otherFactory = link.GetOtherFactory(factory);
                     var futurFactory = otherFactory.CalculatePossession();
                     double bonus = 1;
-                    if (otherFactory.Possession !=1)  bonus = 4;
-                    if (waitingCyborgs>50)  bonus*= bonus;
+                    if (otherFactory.Possession != 1) bonus = 1;
                     if (futurFactory.Item1 != 1)
                     {
-                        if ((factory.Cyborgs > (futurFactory.Item2 + 2 + otherFactory.Productivity * link.Distance)))
-                        {
-                            //à revoir
-                            //double attractivity = (otherFactory.Productivity + 1) * 6 * (1 - link.Distance / 20.0) / (futurFactory.Item2 + 1);*
-                            double attractivity = (bonus) * (otherFactory.Productivity *otherFactory.Productivity + 1) * futurFactory.Item2 / (link.Distance * link.Distance);
+                        double attractivity = (bonus) * (otherFactory.Productivity * otherFactory.Productivity) / (1 + futurFactory.Item2 * link.Distance / 4);
 
-                            selected.Add(new Tuple<Factory, Factory, double, Tuple<int, int>, int>(factory, otherFactory, attractivity, futurFactory, link.Distance));
-                        }
-                        else if (waitingCyborgs > (futurFactory.Item2 + otherFactory.Productivity * link.Distance))
-                        {
-                            //double attractivity = (factory.Cyborgs * 100 / waitingCyborgs) * (otherFactory.Productivity + 1) * 6 * (1 - link.Distance / 20.0) / (futurFactory.Item2 + 1);
-                            double attractivity = (bonus) * (otherFactory.Productivity * otherFactory.Productivity + 1) * futurFactory.Item2 / (link.Distance * link.Distance);
-
-                            selected.Add(new Tuple<Factory, Factory, double, Tuple<int, int>, int>(factory, otherFactory, attractivity, futurFactory, link.Distance));
-                        }
+                        selected.Add(new Tuple<Factory, Factory, double, Tuple<int, int>, int>(factory, otherFactory, attractivity, futurFactory, link.Distance));
+                        Console.Error.WriteLine(selected.LastOrDefault());
                     }
                 }
             }
 
-            var attacks = selected.OrderByDescending(c => c.Item3).ThenByDescending(c => c.Item1.Cyborgs);
+            var attacks = selected.Where(t => t.Item3 > 0);
+            //attacks = selected.;
+            //var attacks = selected.OrderByDescending(c => c.Item3).ThenByDescending(c => c.Item1.Cyborgs);
 
             List<string> instructions = new List<string>();
+            var myBoomers = factories.Values.Where(factory => factory.Possession == 1);
+            var myTargets = factories.Values.Where(factory => factory.Possession == -1 && factory.Productivity > 0 && factory.Cyborgs > 0).OrderByDescending(factory => factory.Productivity * factory.Cyborgs);
+            var ennemyFactory = myTargets.FirstOrDefault();
+            var myFactory = myBoomers.FirstOrDefault();
+            if (ennemyFactory != null)//ennemyFactory
+            {
+                foreach (Factory atarget in myTargets)
+                {
+                    var conquest = ennemyFactory.CalculatePossession();
 
-            if (this.Turn == 1)
-            {
-                var ennemyFactory = factories.Values.Where(factory => factory.Possession == -1).FirstOrDefault();
-                var myFactory = myFactories.FirstOrDefault();
-                if (ennemyFactory != null)
-                {
-                    if (ennemyFactory.Productivity > 0)
+                    if (FactoryBoombed != ennemyFactory && conquest.Item1 * conquest.Item2 < 0)
                     {
-                        instructions.Add("BOMB " + myFactory.FactoryId + " " + ennemyFactory.FactoryId);
-                        this.BombQuantity--;
-                    }
-                }
-            }
-            else
-            {
-                if (BombQuantity > 0)
-                {
-                    
-                    var ennemyFactories = factories.Values.Where(factory => factory.Possession == -1 && factory.Productivity > 1);
-                    var myFactory = myFactories.FirstOrDefault();
-                    foreach (Factory ennemyFactory in ennemyFactories)
-                    {
-                        if (memFactoryId != ennemyFactory.FactoryId)  {
-                        instructions.Add("BOMB " + myFactory.FactoryId + " " + ennemyFactory.FactoryId);
-                        this.BombQuantity--;
-                        memFactoryId = ennemyFactory.FactoryId;}
-                        else {
-                            iddd++;
+                        //rechercher
+                        int distRef = myFactory.GetLinkForOtherFactory(ennemyFactory).Distance;
+                        foreach (Factory aFactory in myBoomers)
+                        {
+                            if (distRef > aFactory.GetLinkForOtherFactory(ennemyFactory).Distance)
+                            {
+                                distRef = aFactory.GetLinkForOtherFactory(ennemyFactory).Distance;
+                                myFactory = aFactory;
+                            }
                         }
-                        break; 
-
+                        instructions.Add("BOMB " + myFactory.FactoryId + " " + atarget.FactoryId);
+                        this.BombQuantity--;
+                        FactoryBoombed = ennemyFactory;
                     }
                 }
             }
-
             if (attacks != null)
             {
-                // var selected = new List<Tuple<Factory, Factory, double, Tuple<int, int>, int>>();
-                //selected.Add(new Tuple<Factory, Factory, double, Tuple<int, int>, int>(factory, otherFactory, attractivity, futurFactory, link.Distance));
                 List<Tuple<int, int, int>> primalOrders = new List<Tuple<int, int, int>>();
-               foreach (var attack in attacks)
+                foreach (var attack in attacks)
                 {
                     if (attack.Item1.Cyborgs > 1)
                     {
@@ -307,14 +284,15 @@ public class Player
                         }
                         Link tmpLink = attack.Item1.GetLinkForOtherFactory(attack.Item2);
                         int idToattack = attack.Item1.GetLinkForOtherFactory(attack.Item2).GetBestFactoryWay(attack.Item1);
-                        primalOrders.Add(new Tuple<int, int, int>(attack.Item1.FactoryId, idToattack, Math.Min((attack.Item4.Item2 + 1 + compensateProductivity), (attack.Item1.Cyborgs - 1))));
+                        double nbItemTofight = Math.Min((attack.Item4.Item2 + 1 + compensateProductivity), (attack.Item1.Cyborgs)) * 1.5;
+                        primalOrders.Add(new Tuple<int, int, int>(attack.Item1.FactoryId, idToattack, (int)nbItemTofight));
                         //instructions.Add("MOVE " + attack.Item1.FactoryId + " " + idToattack + " " + Math.Min((attack.Item4.Item2 + 1 + compensateProductivity), (attack.Item1.Cyborgs - 1)));
                         //}
                     }
                 }
 
                 var finalOrders = primalOrders.GroupBy(t => t.Item1 + " " + t.Item2)
-                    .Select(g => g.Aggregate((a, b) => new Tuple<int, int, int>(a.Item1, a.Item2, a.Item3 + b.Item3)));
+                    .Select(g => g.Aggregate((a, b) => new Tuple<int, int, int>(a.Item1, a.Item2, Math.Max(a.Item3, b.Item3)))).OrderBy(t => t.Item3);
 
                 //                    .Aggregate((a.Item3, b.Item3) => a.Item3);
                 //finalOrder = primalOrders.GroupBy(t => new Tuple<int, int, int>(t.Item1, t.Item2, 0)); // .Aggregate((a, b) => new Tuple<int, int, int>(a.Item1, a.Item2, a.Item3 + b.Item3)); //.GroupBy(t => new Tuple<int, int>(t.Item1, t.Item2));
@@ -380,16 +358,48 @@ public class Player
             return partOne;
         }
     }
+    public class Precogs
+    {
+        List<int> Turns = null;
+        List<int> Troops = null;
+        Factory MyFac { get; set; }
+        public int HowMany(int aTurn)
+        {
+            int increment = 0, turnBefore = 0, nbCyborgs = 0;
+            foreach (int turn in Turns)
+            {
+                if (turn <= aTurn)
+                {
+                    increment = turn - turnBefore;
+                    nbCyborgs += increment;
+                    turnBefore = turn;
+                }
+                else break;
+            }
+            return nbCyborgs;
+        }
+        public int HowMany()
+        {
+            int increment = 0, turnBefore = 0, nbCyborgs = 0;
+            foreach (int turn in Turns)
+            {
+                increment = turn - turnBefore;
+                nbCyborgs += increment;
+                turnBefore = turn;
 
+            }
+            return nbCyborgs;
+        }
+    }
     public class Factory
     {
-        public int FactoryId { get; }
-
+        public int FactoryId { get; private set; }
+        //blic Precogs precog;
         public int Possession { get; set; }
         public int Cyborgs { get; set; }
         public int Productivity { get; private set; }
-        public List<Link> Links { get; }
-
+        public int Boomed { get; private set; }
+        public List<Link> Links { get; private set; }
         public List<WarEvent> WarEvents { get; private set; }
 
         public Factory(int factoryId)
@@ -398,6 +408,7 @@ public class Player
             this.Cyborgs = 0;
             this.Productivity = 0;
             this.Possession = 0;
+            this.Boomed = 0;
             this.Links = new List<Link>();
             this.WarEvents = new List<WarEvent>();
         }
@@ -419,13 +430,55 @@ public class Player
             }
             return null;
         }
+        // renvoyer une liste en lieux et place => tour d'arrivé, futurPossession, futurCyborg... 
+        //ajouter la production de cyborg par tour peux-être plus facile ensuite à manipuler.=> attention donc si l'on modifi des ordres de conquête ou de défense
+        public List<Tuple<int, int, int>> CalculatePossessionbyTurn()
+        {
+            int futurPossession = this.Possession;
+            int futurCyborgs = this.Cyborgs;
+            int turnToAdd = this.Boomed;
+            int oldDistance = 0;
+            int returnDist = 0;
+            int returnPossession = 0;
+            int returnCyborgs = 0;
+            List<Tuple<int, int, int>> turns = new List<Tuple<int, int, int>>();
+            foreach (WarEvent warEvent in this.WarEvents.OrderBy(t => t.Distance))
+            {
+                turnToAdd = warEvent.Distance - turnToAdd;
+                futurCyborgs += this.Productivity * Math.Max(turnToAdd, 0);
+                if (warEvent.Possession == futurPossession)
+                {
+                    futurCyborgs = warEvent.CalculateReinforcement(futurCyborgs);
+                }
+                else
+                {
+                    futurCyborgs = warEvent.CalculateDestruction(futurCyborgs);
+                    if (futurCyborgs < 0)
+                    {
+                        futurPossession = warEvent.Possession;
+                        futurCyborgs = -futurCyborgs;
+                    }
+                }
+                if (oldDistance == warEvent.Distance || returnDist==0)
+                {
+                    returnDist += warEvent.Distance;
+                    returnPossession = futurPossession;
+                    returnCyborgs = futurCyborgs;
+                }
+                turns.Add(new Tuple<int, int, int>(returnDist, returnPossession, returnCyborgs));
+            }
+            return turns;
+        }
 
         public Tuple<int, int> CalculatePossession()
         {
             int futurPossession = this.Possession;
             int futurCyborgs = this.Cyborgs;
+            int turnToAdd = this.Boomed;
             foreach (WarEvent warEvent in this.WarEvents.OrderBy(t => t.Distance))
             {
+                turnToAdd = warEvent.Distance - turnToAdd;
+                futurCyborgs += this.Productivity * Math.Max(turnToAdd, 0);
                 if (warEvent.Possession == futurPossession)
                 {
                     futurCyborgs = warEvent.CalculateReinforcement(futurCyborgs);
@@ -448,12 +501,26 @@ public class Player
         {
             Links.Add(alink);
         }
-
+       
         public void Update(int possession, int cyborgs, int productivity)
         {
             this.Possession = possession;
             this.Cyborgs = cyborgs;
-            this.Productivity = productivity;
+            if (this.Productivity > productivity)
+            {
+                if (this.Boomed == 0)
+                {
+                    this.Boomed = 5;
+                }
+                else
+                {
+                    this.Boomed--;
+                }
+            }
+            else
+            {
+                this.Productivity = productivity;
+            }
         }
 
         public void AddTroop(int possession, int fromFactoryId, int cyborgs, int distance)
@@ -477,6 +544,7 @@ public class Player
     public class Link
     {
         public int Distance { get; private set; }
+        public int DistShort { get; private set; }
         Factory factory1;
         Factory factory2;
         public int BestFactoryWayToFactory1 { get; set; }
@@ -522,7 +590,7 @@ public class Player
 
         public override string ToString()
         {
-            return "Link:  distance=" + this.Distance;
+            return "Link:  distance=" + this.Distance + ", fact1=" + factory1.FactoryId + ", fact2=" + factory2.FactoryId + ", BestTo1=" + BestFactoryWayToFactory1 + ", BestTo2=" + BestFactoryWayToFactory2;
         }
     }
 
@@ -552,7 +620,8 @@ public class Player
         public int Cyborgs { get; set; }
 
 
-        public Troop(int possession, int fromFractory, int cyborgs, int distance) : base(possession, fromFractory, distance)
+        public Troop(int possession, int fromFractory, int cyborgs, int distance)
+            : base(possession, fromFractory, distance)
         {
             this.Cyborgs = cyborgs;
             this.ToDelete = true;
@@ -577,11 +646,13 @@ public class Player
 
 
 
+   
     public class Bomb : WarEvent
     {
         public int bombEffectTurns;
 
-       public Bomb(int possession, int fromFractory, int distance) : base(possession, fromFractory, distance)
+        public Bomb(int possession, int fromFractory, int distance)
+            : base(possession, fromFractory, distance)
         {
             this.bombEffectTurns = 5;
             this.ToDelete = false;
@@ -622,3 +693,5 @@ public class Player
         }
     }
 }
+
+
